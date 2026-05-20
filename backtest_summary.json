@@ -1,0 +1,18 @@
+[
+  {
+    "strategy_name":"rule_based_bounce",
+    "start_date":"2025-01-02",
+    "end_date":"2026-05-13",
+    "min_bounce_score":70.0,
+    "tp_pct":8.0,
+    "sl_pct":6.0,
+    "max_hold_days":10,
+    "max_positions":1,
+    "total_trades":30,
+    "win_rate_pct":36.67,
+    "final_capital":91097.43,
+    "roi_pct":-8.9,
+    "profit_factor":0.722,
+    "max_drawdown_pct":-22.67
+  }
+]

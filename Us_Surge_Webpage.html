@@ -589,6 +589,15 @@ td:first-child{text-align:left}
 
   <!-- ══ EPS TAB ══ -->
   <div id="vEps" style="display:none">
+
+    <!-- EPS live banner -->
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
+      background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+      margin-bottom:20px;font-size:12px;color:#15803d">
+      <span style="font-size:16px">✅</span>
+      <div><strong>Live EPS Data</strong> — eps_latest.json · 3,992 symbols · Null fields แสดงเป็น —</div>
+    </div>
+
     <!-- EPS Summary Cards -->
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px" id="epsSummaryCards">
       <div class="kc">
@@ -619,13 +628,14 @@ td:first-child{text-align:left}
         <thead><tr>
           <th>Symbol</th>
           <th>Company</th>
-          <th>EPS Current</th>
-          <th>EPS Previous</th>
-          <th>EPS Change</th>
-          <th>EPS Growth %</th>
-          <th>EPS Estimate</th>
-          <th>Beat / Miss</th>
-          <th>Surprise %</th>
+          <th>EPS Latest</th>
+          <th>EPS Prev Year</th>
+          <th>YoY Chg $</th>
+          <th>YoY Chg %</th>
+          <th>QoQ Chg %</th>
+          <th>YoY Trend</th>
+          <th>QoQ Trend</th>
+          <th>Period</th>
           <th>Report Date</th>
         </tr></thead>
         <tbody id="epsBody"></tbody>
@@ -644,6 +654,11 @@ td:first-child{text-align:left}
         </div>
       </div>
     </div>
+    <!-- EPS pagination -->
+    <div class="pgn" id="epsPgn">
+      <span class="pgi" id="epsPgi">—</span>
+      <div class="pgc" id="epsPgc"></div>
+    </div>
   </div>
 
 </div><!-- /main -->
@@ -659,6 +674,8 @@ let BT_TRADES = [];
 let BT_EQUITY = [];
 let BT_SUMMARY = {};
 let sortKey = 'close', sortDir = -1;
+let epsPage = 1;
+const EPS_PAGE_SIZE = 20;
 let page = 1;
 const PAGE_SIZE = 20;
 let expandedTr = null;
@@ -954,7 +971,15 @@ function applyAll() {
 
   page=1;
   if(expandedTr){expandedTr.remove();expandedTr=null;}
-  renderScreener();
+
+  // re-render whichever tab is active
+  const activeTab = document.querySelector('.ctab.active')?.id;
+  if      (activeTab === 'ctab-screener') renderScreener();
+  else if (activeTab === 'ctab-stats')    renderStats();
+  else if (activeTab === 'ctab-eps')      { epsPage=1; renderEps(); }
+  else if (activeTab === 'ctab-bt')       renderBacktest();
+  else renderScreener();
+
   showToast(`${FILTERED.length.toLocaleString()} results`);
 }
 
@@ -1064,7 +1089,7 @@ function setTab(btn, view) {
   ['vS','vSt','vEps','vBt'].forEach(id=>document.getElementById(id).style.display='none');
   document.getElementById({screener:'vS',stats:'vSt',eps:'vEps',bt:'vBt'}[view]).style.display='';
   if(view==='stats') renderStats();
-  if(view==='eps')   renderEps();
+  if(view==='eps')   { epsPage=1; renderEps(); }
   if(view==='bt')    renderBacktest();
 }
 
@@ -1166,106 +1191,127 @@ function exportCSV(){
 let toastT;
 function showToast(msg){ const t=document.getElementById('toast'); document.getElementById('toastMsg').textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3000); }
 
-// ═══════════════════════════════════════════
-//  EPS MOCK DATA
-// ═══════════════════════════════════════════
-const EPS_MOCK = {
-  "AAPL":  { eps_current:6.42,  eps_previous:5.89,  eps_estimate:6.20,  eps_growth_pct:9.0,  eps_report_date:"2025-02-01" },
-  "MSFT":  { eps_current:3.23,  eps_previous:2.93,  eps_estimate:3.10,  eps_growth_pct:10.2, eps_report_date:"2025-01-29" },
-  "NVDA":  { eps_current:0.89,  eps_previous:0.40,  eps_estimate:0.84,  eps_growth_pct:122.5,eps_report_date:"2025-02-26" },
-  "GOOGL": { eps_current:2.15,  eps_previous:1.64,  eps_estimate:2.00,  eps_growth_pct:31.1, eps_report_date:"2025-02-04" },
-  "META":  { eps_current:8.02,  eps_previous:5.33,  eps_estimate:7.60,  eps_growth_pct:50.5, eps_report_date:"2025-01-29" },
-  "AMZN":  { eps_current:1.86,  eps_previous:1.00,  eps_estimate:1.72,  eps_growth_pct:86.0, eps_report_date:"2025-02-06" },
-  "TSLA":  { eps_current:0.71,  eps_previous:0.73,  eps_estimate:0.76,  eps_growth_pct:-2.7, eps_report_date:"2025-01-29" },
-  "AMD":   { eps_current:0.77,  eps_previous:0.69,  eps_estimate:0.74,  eps_growth_pct:11.6, eps_report_date:"2025-01-28" },
-  "INTC":  { eps_current:-0.46, eps_previous:0.40,  eps_estimate:-0.12, eps_growth_pct:null, eps_report_date:"2025-01-23" },
-  "NFLX":  { eps_current:4.27,  eps_previous:2.11,  eps_estimate:4.20,  eps_growth_pct:102.4,eps_report_date:"2025-01-21" },
-  "AVGO":  { eps_current:14.90, eps_previous:10.99, eps_estimate:14.20, eps_growth_pct:35.6, eps_report_date:"2025-03-06" },
-  "ORCL":  { eps_current:1.47,  eps_previous:1.34,  eps_estimate:1.40,  eps_growth_pct:9.7,  eps_report_date:"2025-03-11" },
-  "ADBE":  { eps_current:4.65,  eps_previous:4.48,  eps_estimate:4.60,  eps_growth_pct:3.8,  eps_report_date:"2025-03-12" },
-  "QCOM":  { eps_current:3.41,  eps_previous:2.96,  eps_estimate:3.20,  eps_growth_pct:15.2, eps_report_date:"2025-01-29" },
-  "TXN":   { eps_current:1.30,  eps_previous:1.96,  eps_estimate:1.24,  eps_growth_pct:-33.7,eps_report_date:"2025-01-22" },
-  "AMAT":  { eps_current:2.38,  eps_previous:2.09,  eps_estimate:2.30,  eps_growth_pct:13.9, eps_report_date:"2025-02-19" },
-  "MU":    { eps_current:1.79,  eps_previous:0.42,  eps_estimate:1.72,  eps_growth_pct:326.2,eps_report_date:"2025-03-19" },
-  "LRCX":  { eps_current:1.06,  eps_previous:0.97,  eps_estimate:1.02,  eps_growth_pct:9.3,  eps_report_date:"2025-01-22" },
-  "NOW":   { eps_current:3.92,  eps_previous:3.11,  eps_estimate:3.84,  eps_growth_pct:26.1, eps_report_date:"2025-01-22" },
-  "SNOW":  { eps_current:0.39,  eps_previous:0.14,  eps_estimate:0.35,  eps_growth_pct:178.6,eps_report_date:"2025-02-26" },
-  "PLTR":  { eps_current:0.14,  eps_previous:0.08,  eps_estimate:0.11,  eps_growth_pct:75.0, eps_report_date:"2025-02-03" },
-  "UBER":  { eps_current:3.21,  eps_previous:-0.32, eps_estimate:0.42,  eps_growth_pct:null, eps_report_date:"2025-02-05" },
-  "ABNB":  { eps_current:2.31,  eps_previous:2.39,  eps_estimate:2.10,  eps_growth_pct:-3.3, eps_report_date:"2025-02-13" },
-  "CRWD":  { eps_current:1.03,  eps_previous:0.89,  eps_estimate:1.00,  eps_growth_pct:15.7, eps_report_date:"2025-02-25" },
-  "DDOG":  { eps_current:0.49,  eps_previous:0.44,  eps_estimate:0.46,  eps_growth_pct:11.4, eps_report_date:"2025-02-13" },
-  "ZS":    { eps_current:0.87,  eps_previous:0.72,  eps_estimate:0.83,  eps_growth_pct:20.8, eps_report_date:"2025-02-24" },
-  "NET":   { eps_current:0.19,  eps_previous:0.13,  eps_estimate:0.17,  eps_growth_pct:46.2, eps_report_date:"2025-02-06" },
-  "SHOP":  { eps_current:0.44,  eps_previous:0.40,  eps_estimate:0.43,  eps_growth_pct:10.0, eps_report_date:"2025-02-11" },
-  "MELI":  { eps_current:12.61, eps_previous:7.16,  eps_estimate:11.90, eps_growth_pct:76.1, eps_report_date:"2025-02-26" },
-  "SPOT":  { eps_current:1.88,  eps_previous:0.36,  eps_estimate:1.64,  eps_growth_pct:422.2,eps_report_date:"2025-02-04" },
-};
+let EPS_LIVE = {};
+
 
 // ═══════════════════════════════════════════
 //  EPS TAB
 // ═══════════════════════════════════════════
 function renderEps() {
-  const tbody = document.getElementById('epsBody');
+  const tbody  = document.getElementById('epsBody');
   const emptyEl = document.getElementById('epsEmpty');
-  tbody.innerHTML = '';
 
-  // Merge mock EPS into filtered data
-  const withMock = FILTERED.map(s => ({
-    ...s,
-    ...(EPS_MOCK[s.symbol] || {})
-  }));
+  // Merge live EPS — only for stocks that have it
+  const withEpsOnly = FILTERED.reduce((acc, s) => {
+    const live = EPS_LIVE[s.symbol];
+    if (!live) return acc;
+    acc.push(Object.assign({}, s, {
+      eps_current:      live.eps_latest,
+      eps_previous:     live.eps_prev_year,
+      eps_growth_pct:   live.eps_yoy_change_pct,
+      eps_qoq_pct:      live.eps_qoq_change_pct,
+      eps_report_date:  live.eps_report_date,
+      fiscal_period:    live.fiscal_period,
+      eps_qoq_improved: live.eps_qoq_improved,
+      eps_yoy_improved: live.eps_yoy_improved,
+      eps_positive:     live.eps_positive
+    }));
+    return acc;
+  }, []);
 
-  // Check if any stock has eps data
-  const hasEps = withMock.some(s => s.eps_current != null);
-
-  if (!hasEps) {
+  if (!withEpsOnly.length) {
     emptyEl.style.display = 'flex';
-    // Summary cards — blank
-    ['epsBeatRate','epsAvgGrowth','epsPositive','epsNegative'].forEach(id => {
-      document.getElementById(id).textContent = '—';
-    });
+    ['epsBeatRate','epsAvgGrowth','epsPositive','epsNegative']
+      .forEach(id => { document.getElementById(id).textContent = '—'; });
+    tbody.innerHTML = '';
+    renderEpsPagination(0);
     return;
   }
-
   emptyEl.style.display = 'none';
 
-  // Summary stats
-  const withEps  = withMock.filter(s => s.eps_current != null);
-  const positive = withEps.filter(s => s.eps_current > 0).length;
-  const negative = withEps.filter(s => s.eps_current < 0).length;
-  const beats    = withEps.filter(s => s.eps_estimate != null && s.eps_current > s.eps_estimate).length;
-  const beatRate = withEps.length ? (beats / withEps.length * 100).toFixed(1) : '—';
-  const growths  = withEps.filter(s => s.eps_growth_pct != null).map(s => s.eps_growth_pct);
-  const avgGrowth= growths.length ? (growths.reduce((a,b)=>a+b,0)/growths.length).toFixed(1) : '—';
+  // Summary cards
+  const positive  = withEpsOnly.filter(s => s.eps_current > 0).length;
+  const negative  = withEpsOnly.filter(s => s.eps_current < 0).length;
+  const beats     = withEpsOnly.filter(s => s.eps_yoy_improved === true).length;
+  const beatRate  = (beats / withEpsOnly.length * 100).toFixed(1);
+  const growths   = withEpsOnly.filter(s => s.eps_growth_pct != null).map(s => s.eps_growth_pct);
+  const avgGrowth = growths.length ? (growths.reduce((a,b)=>a+b,0)/growths.length).toFixed(1) : null;
 
-  document.getElementById('epsBeatRate').textContent  = beatRate !== '—' ? beatRate + '%' : '—';
-  document.getElementById('epsAvgGrowth').textContent = avgGrowth !== '—' ? (avgGrowth > 0 ? '+' : '') + avgGrowth + '%' : '—';
+  document.getElementById('epsBeatRate').textContent  = beatRate + '%';
+  document.getElementById('epsAvgGrowth').textContent = avgGrowth != null ? (avgGrowth > 0 ? '+' : '') + avgGrowth + '%' : '—';
   document.getElementById('epsPositive').textContent  = positive;
   document.getElementById('epsNegative').textContent  = negative;
 
-  // Table rows
-  // Show all filtered stocks (with EPS if available)
-  withMock.slice(0, 100).forEach(s => {
-    const curr = s.eps_current, prev = s.eps_previous, est = s.eps_estimate;
-    const chg  = (curr != null && prev != null) ? curr - prev : null;
-    const growPct = s.eps_growth_pct;
-    const surprise = (curr != null && est != null) ? ((curr - est) / Math.abs(est) * 100) : null;
-    const beat = surprise != null ? surprise >= 0 : null;
+  // Paginate
+  const start = (epsPage - 1) * EPS_PAGE_SIZE;
+  const slice = withEpsOnly.slice(start, start + EPS_PAGE_SIZE);
 
-    tbody.innerHTML += `<tr>
-      <td style="text-align:left"><span class="stk">${s.symbol}</span></td>
-      <td style="text-align:left"><span class="sn">${(s['Security Name']||'').slice(0,24)}</span></td>
-      <td class="num ${curr > 0 ? 'up' : curr < 0 ? 'dn' : ''}">${curr != null ? '$' + fNum(curr) : '—'}</td>
-      <td class="num">${prev != null ? '$' + fNum(prev) : '—'}</td>
-      <td class="num ${chg > 0 ? 'up' : chg < 0 ? 'dn' : ''}">${chg != null ? (chg > 0 ? '+' : '') + '$' + fNum(chg) : '—'}</td>
-      <td class="num ${growPct > 0 ? 'up' : growPct < 0 ? 'dn' : ''}">${growPct != null ? (growPct > 0 ? '+' : '') + fNum(growPct) + '%' : '—'}</td>
-      <td class="num">${est != null ? '$' + fNum(est) : '—'}</td>
-      <td>${beat != null ? `<span class="badge ${beat ? 'b' : 's'}">${beat ? '✓ Beat' : '✗ Miss'}</span>` : '—'}</td>
-      <td class="num ${surprise > 0 ? 'up' : surprise < 0 ? 'dn' : ''}">${surprise != null ? (surprise > 0 ? '+' : '') + fNum(surprise) + '%' : '—'}</td>
-      <td class="num" style="color:var(--ink-3)">${s.eps_report_date || '—'}</td>
-    </tr>`;
+  // Build HTML as array then join — single DOM write = fast
+  const rows = slice.map(s => {
+    const curr = s.eps_current, prev = s.eps_previous;
+    const yoyChg = (curr != null && prev != null) ? curr - prev : null;
+    const yoyPct = s.eps_growth_pct, qoqPct = s.eps_qoq_pct;
+    const yoyTrend = s.eps_yoy_improved != null
+      ? '<span class="badge ' + (s.eps_yoy_improved ? 'b' : 's') + '">' + (s.eps_yoy_improved ? '↑ Better' : '↓ Worse') + '</span>'
+      : '—';
+    const qoqTrend = s.eps_qoq_improved != null
+      ? '<span class="badge ' + (s.eps_qoq_improved ? 'b' : 's') + '">' + (s.eps_qoq_improved ? '↑ Better' : '↓ Worse') + '</span>'
+      : '—';
+    return '<tr>'
+      + '<td style="text-align:left"><div class="sw">'
+      + '<div class="sl" style="background:' + symColor(s.symbol) + ';width:26px;height:26px;font-size:9px">' + s.symbol.slice(0,2) + '</div>'
+      + '<span class="stk">' + s.symbol + '</span></div></td>'
+      + '<td style="text-align:left"><span class="sn">' + (s['Security Name']||'').slice(0,22) + '</span></td>'
+      + '<td class="num ' + (curr > 0 ? 'up' : curr < 0 ? 'dn' : '') + '" style="font-weight:600">' + (curr != null ? '$' + fNum(curr) : '—') + '</td>'
+      + '<td class="num">' + (prev != null ? '$' + fNum(prev) : '—') + '</td>'
+      + '<td class="num ' + (yoyChg > 0 ? 'up' : yoyChg < 0 ? 'dn' : '') + '">' + (yoyChg != null ? (yoyChg > 0 ? '+' : '') + '$' + fNum(yoyChg) : '—') + '</td>'
+      + '<td class="num ' + (yoyPct > 0 ? 'up' : yoyPct < 0 ? 'dn' : '') + '">' + (yoyPct != null ? (yoyPct > 0 ? '+' : '') + fNum(yoyPct,1) + '%' : '—') + '</td>'
+      + '<td class="num ' + (qoqPct > 0 ? 'up' : qoqPct < 0 ? 'dn' : '') + '">' + (qoqPct != null ? (qoqPct > 0 ? '+' : '') + fNum(qoqPct,1) + '%' : '—') + '</td>'
+      + '<td style="text-align:right">' + yoyTrend + '</td>'
+      + '<td style="text-align:right">' + qoqTrend + '</td>'
+      + '<td class="num" style="color:var(--ink-3)">' + (s.fiscal_period || '—') + '</td>'
+      + '<td class="num" style="color:var(--ink-3)">' + (s.eps_report_date || '—') + '</td>'
+      + '</tr>';
   });
+
+  tbody.innerHTML = rows.join(''); // single write = no repaint per row
+  renderEpsPagination(withEpsOnly.length);
+}
+
+function renderEpsPagination(total) {
+  const pg = document.getElementById('epsPgn');
+  if (!pg) return;
+  const totalPages = Math.ceil(total / EPS_PAGE_SIZE);
+  const start = (epsPage - 1) * EPS_PAGE_SIZE + 1;
+  const end   = Math.min(epsPage * EPS_PAGE_SIZE, total);
+  document.getElementById('epsPgi').textContent = total
+    ? 'Showing ' + start + '–' + end + ' of ' + total.toLocaleString() + ' stocks with EPS'
+    : 'No EPS data matches current filter';
+
+  const pgc = document.getElementById('epsPgc');
+  pgc.innerHTML = '';
+  const addBtn = (label, p, disabled, active) => {
+    const b = document.createElement('button');
+    b.className = 'pgb' + (active ? ' active' : '');
+    b.textContent = label; b.disabled = disabled;
+    if (!disabled) b.onclick = () => { epsPage = p; renderEps(); };
+    pgc.appendChild(b);
+  };
+  addBtn('‹', epsPage - 1, epsPage === 1);
+  const range = [];
+  if (totalPages <= 7) for (let i = 1; i <= totalPages; i++) range.push(i);
+  else {
+    range.push(1);
+    if (epsPage > 3) range.push('…');
+    for (let i = Math.max(2, epsPage-1); i <= Math.min(totalPages-1, epsPage+1); i++) range.push(i);
+    if (epsPage < totalPages - 2) range.push('…');
+    range.push(totalPages);
+  }
+  range.forEach(r => {
+    if (r === '…') { const b = document.createElement('button'); b.className='pgb'; b.textContent='…'; b.style.cursor='default'; b.style.color='var(--ink-4)'; pgc.appendChild(b); }
+    else addBtn(r, r, false, r === epsPage);
+  });
+  addBtn('›', epsPage + 1, epsPage === totalPages);
 }
 
 // ═══════════════════════════════════════════
@@ -1309,14 +1355,16 @@ async function loadData(){
     loadTxt.textContent = 'Loading backtest data…';
     const tryFetch = async (url) => { try{ const r=await fetch(url); return r.ok?r:null; }catch{return null;} };
 
-    const [sumRes, trRes, eqRes] = await Promise.all([
+    const [sumRes, trRes, eqRes, epsRes] = await Promise.all([
       tryFetch('backtest_summary.json'),
       tryFetch('backtest_trades.json'),
       tryFetch('backtest_equity_curve.json'),
+      tryFetch('eps_latest.json'),
     ]);
     if(sumRes){ const d=await sumRes.json(); BT_SUMMARY=Array.isArray(d)?d[0]:d; }
     if(trRes)  BT_TRADES  = await trRes.json();
     if(eqRes)  BT_EQUITY  = await eqRes.json();
+    if(epsRes){ const arr=await epsRes.json(); EPS_LIVE={}; arr.forEach(e=>{ EPS_LIVE[e.symbol]=e; }); }
 
     loadEl.classList.add('hide');
     renderScreener();

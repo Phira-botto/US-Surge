@@ -136,6 +136,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--nav-h);
   border:none;background:none;color:var(--ink-3);cursor:pointer;transition:all .15s}
 .ctab.active{background:var(--surface);color:var(--ink-1);box-shadow:0 1px 4px rgba(0,0,0,.08)}
 
+
 /* ── TABLE ── */
 .tw{background:var(--surface);border:1px solid var(--border);
   border-radius:12px;overflow:hidden;margin-bottom:20px}
@@ -589,15 +590,6 @@ td:first-child{text-align:left}
 
   <!-- ══ EPS TAB ══ -->
   <div id="vEps" style="display:none">
-
-    <!-- EPS live banner -->
-    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;
-      background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
-      margin-bottom:20px;font-size:12px;color:#15803d">
-      <span style="font-size:16px">✅</span>
-      <div><strong>Live EPS Data</strong> — eps_latest.json · 3,992 symbols · Null fields แสดงเป็น —</div>
-    </div>
-
     <!-- EPS Summary Cards -->
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px" id="epsSummaryCards">
       <div class="kc">
@@ -623,7 +615,7 @@ td:first-child{text-align:left}
     </div>
 
     <!-- EPS Table -->
-    <div class="tw">
+    <div class="tw" class="tw">
       <table>
         <thead><tr>
           <th>Symbol</th>
@@ -637,6 +629,7 @@ td:first-child{text-align:left}
           <th>QoQ Trend</th>
           <th>Period</th>
           <th>Report Date</th>
+          <th>Movement</th>
         </tr></thead>
         <tbody id="epsBody"></tbody>
       </table>
@@ -1194,6 +1187,62 @@ function showToast(msg){ const t=document.getElementById('toast'); document.getE
 let EPS_LIVE = {};
 
 
+// EPS 2-point sparkline — shows prev → latest movement
+function epsSpark(curr, prev, history) {
+  // history = array of EPS values oldest→newest e.g. [0.42, 0.55, 0.61, 0.58, 0.70]
+  // curr/prev = fallback when history not available yet
+
+  const W=60, H=28, pad=4;
+  const gid = 'eg' + Math.random().toString(36).slice(2,6);
+
+  // ── build points array ──
+  let pts = [];
+  if (history && Array.isArray(history) && history.filter(v=>v!=null&&!isNaN(v)).length >= 3) {
+    pts = history.filter(v => v != null && !isNaN(v));
+  } else if (prev != null && !isNaN(prev) && curr != null && !isNaN(curr)) {
+    // only 2 points — pad with interpolated middle to avoid flat line
+    const mid = (prev + curr) / 2 + (curr - prev) * 0.1;
+    pts = [prev, mid, curr];
+  } else if (curr != null && !isNaN(curr)) {
+    // single value — draw a flat line
+    const col = curr >= 0 ? 'var(--green)' : 'var(--red)';
+    const cy = H / 2;
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:60px;height:28px">'
+      + '<line x1="' + pad + '" y1="' + cy + '" x2="' + (W-pad) + '" y2="' + cy + '" stroke="' + col + '" stroke-width="1.8" stroke-dasharray="3,2"/>'
+      + '<circle cx="' + (W-pad) + '" cy="' + cy + '" r="2.5" fill="' + col + '"/>'
+      + '</svg>';
+  } else {
+    return '<span style="color:var(--ink-4);font-size:11px">—</span>';
+  }
+
+  const mn  = Math.min(...pts);
+  const mx  = Math.max(...pts);
+  const rng = mx - mn || Math.abs(mx) * 0.2 || 0.01;
+  const n   = pts.length;
+  const sx  = i => pad + (i / (n-1)) * (W - pad*2);
+  const sy  = v => H - pad - ((v - mn) / rng) * (H - pad*2);
+
+  const isUp = pts[pts.length-1] >= pts[0];
+  const col  = isUp ? 'var(--green)' : 'var(--red)';
+
+  // path
+  const pathD = pts.map((v,i) => (i===0?'M':'L') + sx(i).toFixed(1) + ',' + sy(v).toFixed(1)).join(' ');
+  const areaD = pathD
+    + ' L' + sx(n-1).toFixed(1) + ',' + H
+    + ' L' + sx(0).toFixed(1)   + ',' + H + ' Z';
+
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:60px;height:28px" preserveAspectRatio="none">'
+    + '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0%" stop-color="' + col + '" stop-opacity=".3"/>'
+    + '<stop offset="100%" stop-color="' + col + '" stop-opacity="0"/>'
+    + '</linearGradient></defs>'
+    + '<path d="' + areaD + '" fill="url(#' + gid + ')"/>'
+    + '<path d="' + pathD + '" fill="none" stroke="' + col + '" stroke-width="1.8"/>'
+    + '<circle cx="' + sx(0).toFixed(1) + '" cy="' + sy(pts[0]).toFixed(1) + '" r="2" fill="#a1a1aa"/>'
+    + '<circle cx="' + sx(n-1).toFixed(1) + '" cy="' + sy(pts[n-1]).toFixed(1) + '" r="2.5" fill="' + col + '"/>'
+    + '</svg>';
+}
+
 // ═══════════════════════════════════════════
 //  EPS TAB
 // ═══════════════════════════════════════════
@@ -1214,7 +1263,8 @@ function renderEps() {
       fiscal_period:    live.fiscal_period,
       eps_qoq_improved: live.eps_qoq_improved,
       eps_yoy_improved: live.eps_yoy_improved,
-      eps_positive:     live.eps_positive
+      eps_positive:     live.eps_positive,
+      eps_history:      live.eps_history || null
     }));
     return acc;
   }, []);
@@ -1271,12 +1321,15 @@ function renderEps() {
       + '<td style="text-align:right">' + qoqTrend + '</td>'
       + '<td class="num" style="color:var(--ink-3)">' + (s.fiscal_period || '—') + '</td>'
       + '<td class="num" style="color:var(--ink-3)">' + (s.eps_report_date || '—') + '</td>'
+      + '<td><div class="spk">' + epsSpark(curr, prev, s.eps_history) + '</div></td>'
       + '</tr>';
   });
 
   tbody.innerHTML = rows.join(''); // single write = no repaint per row
   renderEpsPagination(withEpsOnly.length);
 }
+
+
 
 function renderEpsPagination(total) {
   const pg = document.getElementById('epsPgn');

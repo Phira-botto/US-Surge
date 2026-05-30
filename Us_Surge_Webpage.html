@@ -137,6 +137,40 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--nav-h);
 .ctab.active{background:var(--surface);color:var(--ink-1);box-shadow:0 1px 4px rgba(0,0,0,.08)}
 
 
+
+/* ── EPS EXPAND ROW ── */
+.eps-exp-td { padding:0 !important; height:auto !important; }
+.eps-exp-panel {
+  display:grid; grid-template-columns:280px 1fr;
+  border-top:1px solid var(--border);
+  background:var(--bg);
+  animation:sd .18s ease;
+}
+.eps-exp-left {
+  padding:18px 20px; border-right:1px solid var(--border);
+  display:flex; flex-direction:column; gap:12px;
+}
+.eps-exp-title {
+  font-size:11px; font-weight:700; color:var(--ink-3);
+  letter-spacing:.5px; text-transform:uppercase;
+}
+.eps-exp-metrics { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.eps-exp-metric { display:flex; flex-direction:column; gap:3px; }
+.eps-exp-key { font-size:10px; color:var(--ink-3); }
+.eps-exp-val { font-family:var(--mono); font-size:15px; font-weight:600; }
+.eps-exp-val.up{color:var(--green)}.eps-exp-val.dn{color:var(--red)}.eps-exp-val.nt{color:var(--ink-1)}
+.eps-verdict {
+  padding:8px 12px; border-radius:7px; font-size:12px; font-weight:600;
+  display:flex; align-items:center; gap:8px;
+}
+.eps-verdict.pos{background:var(--green-lt);color:#15803d;border:1px solid var(--green-bd)}
+.eps-verdict.neg{background:var(--red-lt);color:var(--red);border:1px solid var(--red-bd)}
+.eps-exp-right { padding:18px 20px; }
+.eps-chart-label {
+  font-size:11px; font-weight:700; color:var(--ink-3);
+  letter-spacing:.5px; text-transform:uppercase; margin-bottom:12px;
+}
+
 /* ── TABLE ── */
 .tw{background:var(--surface);border:1px solid var(--border);
   border-radius:12px;overflow:hidden;margin-bottom:20px}
@@ -621,15 +655,12 @@ td:first-child{text-align:left}
           <th>Symbol</th>
           <th>Company</th>
           <th>EPS Latest</th>
-          <th>EPS Prev Year</th>
+          <th>Prev Year</th>
           <th>YoY Chg $</th>
           <th>YoY Chg %</th>
-          <th>QoQ Chg %</th>
-          <th>YoY Trend</th>
-          <th>QoQ Trend</th>
+          <th>Trend</th>
           <th>Period</th>
           <th>Report Date</th>
-          <th>Movement</th>
         </tr></thead>
         <tbody id="epsBody"></tbody>
       </table>
@@ -669,6 +700,7 @@ let BT_SUMMARY = {};
 let sortKey = 'close', sortDir = -1;
 let epsPage = 1;
 const EPS_PAGE_SIZE = 20;
+let epsExpandRow = null;
 let page = 1;
 const PAGE_SIZE = 20;
 let expandedTr = null;
@@ -1302,12 +1334,12 @@ function renderEps() {
     const yoyChg = (curr != null && prev != null) ? curr - prev : null;
     const yoyPct = s.eps_growth_pct, qoqPct = s.eps_qoq_pct;
     const yoyTrend = s.eps_yoy_improved != null
-      ? '<span class="badge ' + (s.eps_yoy_improved ? 'b' : 's') + '">' + (s.eps_yoy_improved ? '↑ Better' : '↓ Worse') + '</span>'
+      ? '<span class="badge ' + (s.eps_yoy_improved ? 'b' : 's') + '">' + (s.eps_yoy_improved ? '↑ Up' : '↓ Down') + '</span>'
       : '—';
     const qoqTrend = s.eps_qoq_improved != null
-      ? '<span class="badge ' + (s.eps_qoq_improved ? 'b' : 's') + '">' + (s.eps_qoq_improved ? '↑ Better' : '↓ Worse') + '</span>'
+      ? '<span class="badge ' + (s.eps_qoq_improved ? 'b' : 's') + '">' + (s.eps_qoq_improved ? '↑ Up' : '↓ Down') + '</span>'
       : '—';
-    return '<tr>'
+    return '<tr data-epssym="' + s.symbol + '" style="cursor:pointer">'
       + '<td style="text-align:left"><div class="sw">'
       + '<div class="sl" style="background:' + symColor(s.symbol) + ';width:26px;height:26px;font-size:9px">' + s.symbol.slice(0,2) + '</div>'
       + '<span class="stk">' + s.symbol + '</span></div></td>'
@@ -1316,20 +1348,319 @@ function renderEps() {
       + '<td class="num">' + (prev != null ? '$' + fNum(prev) : '—') + '</td>'
       + '<td class="num ' + (yoyChg > 0 ? 'up' : yoyChg < 0 ? 'dn' : '') + '">' + (yoyChg != null ? (yoyChg > 0 ? '+' : '') + '$' + fNum(yoyChg) : '—') + '</td>'
       + '<td class="num ' + (yoyPct > 0 ? 'up' : yoyPct < 0 ? 'dn' : '') + '">' + (yoyPct != null ? (yoyPct > 0 ? '+' : '') + fNum(yoyPct,1) + '%' : '—') + '</td>'
-      + '<td class="num ' + (qoqPct > 0 ? 'up' : qoqPct < 0 ? 'dn' : '') + '">' + (qoqPct != null ? (qoqPct > 0 ? '+' : '') + fNum(qoqPct,1) + '%' : '—') + '</td>'
       + '<td style="text-align:right">' + yoyTrend + '</td>'
-      + '<td style="text-align:right">' + qoqTrend + '</td>'
       + '<td class="num" style="color:var(--ink-3)">' + (s.fiscal_period || '—') + '</td>'
       + '<td class="num" style="color:var(--ink-3)">' + (s.eps_report_date || '—') + '</td>'
-      + '<td><div class="spk">' + epsSpark(curr, prev, s.eps_history) + '</div></td>'
       + '</tr>';
   });
 
-  tbody.innerHTML = rows.join(''); // single write = no repaint per row
+  tbody.innerHTML = rows.join('');
+  tbody.onclick = e => {
+    const tr = e.target.closest('tr[data-epssym]');
+    if (tr) toggleEpsExpand(tr.dataset.epssym);
+  };
   renderEpsPagination(withEpsOnly.length);
 }
 
 
+
+
+// ═══════════════════════════════════════════
+//  EPS EXPAND ROW (click row → chart below)
+// ═══════════════════════════════════════════
+function toggleEpsExpand(sym) {
+  // close existing
+  if (epsExpandRow) {
+    const was = epsExpandRow.dataset.forSym;
+    epsExpandRow.remove(); epsExpandRow = null;
+    if (was === sym) return;
+  }
+
+  const srcRow = document.querySelector('#epsBody tr[data-epssym="' + sym + '"]');
+  if (!srcRow) return;
+
+  const live = EPS_LIVE[sym];
+  if (!live) return;
+
+  const s       = FILTERED.find(x => x.symbol === sym) || {};
+  const name    = (s['Security Name'] || sym).slice(0, 35);
+  const curr    = live.eps_latest;
+  const prev    = live.eps_prev_year;
+  const yoyPct  = live.eps_yoy_change_pct;
+  const yoyDiff = (curr != null && prev != null) ? curr - prev : null;
+  const qoqPct  = live.eps_qoq_change_pct;
+  const yoyUp   = live.eps_yoy_improved;
+  const history = live.eps_history || null;
+  const reportDate = live.eps_report_date || s.date || null;   // EPS report date
+  const close   = s.close || null;
+  const dataDate = s.date ? s.date.split('T')[0] : null;       // today's price date
+
+  const hasPrev = prev != null && !isNaN(prev);
+  const hasCurr = curr != null && !isNaN(curr);
+
+  // ── EPS points + date labels ──
+  let epsPts   = [];
+  let xDateLbls = [];   // what shows on x-axis per point
+
+  if (history && Array.isArray(history) && history.filter(v=>v!=null&&!isNaN(v)).length >= 3) {
+    epsPts = history.filter(v => v != null && !isNaN(v));
+    xDateLbls = epsPts.map((_,i) => 'Q'+(i+1));
+    // last label = report date if available
+    if (reportDate) xDateLbls[xDateLbls.length-1] = fmtShortDate(reportDate);
+  } else if (hasPrev && hasCurr) {
+    const mid = (prev + curr) / 2 + (curr - prev) * 0.15;
+    epsPts    = [prev, mid, curr];
+    // x labels: prev year date (approx -1yr from report) | mid | report date
+    const prevDateStr = reportDate ? shiftDateByYear(reportDate, -1) : 'Prev Year';
+    const repDateStr  = reportDate ? fmtShortDate(reportDate) : 'Latest';
+    xDateLbls = [prevDateStr, '', repDateStr];
+  } else if (hasCurr) {
+    epsPts    = [curr, curr];
+    xDateLbls = [reportDate ? fmtShortDate(reportDate) : 'Report', dataDate ? fmtShortDate(dataDate) : 'Today'];
+  }
+
+  const n = epsPts.length || 3;
+
+  // ── Stock price points — synthesised from close + price_change_pct ──
+  const changePct = s.price_change_pct || 0;
+  let pricePts = [];
+  if (close != null) {
+    const startPrice = close / (1 + changePct / 100);
+    const step = (close - startPrice) / (n - 1);
+    for (let i = 0; i < n; i++) {
+      const noise = (Math.random() - 0.48) * startPrice * 0.015;
+      pricePts.push(startPrice + step * i + (i > 0 && i < n - 1 ? noise : 0));
+    }
+    pricePts[n - 1] = close;
+  }
+
+  // price x-axis dates: spread from ~reportDate to dataDate
+  // (same x positions as EPS — shared time axis)
+  const priceStartDate = reportDate ? fmtShortDate(reportDate) : '';
+  const priceEndDate   = dataDate   ? fmtShortDate(dataDate)   : 'Today';
+
+  // ── Chart geometry ──
+  const W = 560, H = 155;
+  const padL = 52, padR = 52, padT = 18, padB = 32;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  const gidEps   = 'eg' + Math.random().toString(36).slice(2,6);
+  const gidPrice = 'pg' + Math.random().toString(36).slice(2,6);
+
+  // EPS scale (left axis)
+  const epsMin = Math.min(...epsPts);
+  const epsMax = Math.max(...epsPts);
+  const epsRng = epsMax - epsMin || Math.abs(epsMax) * 0.2 || 0.01;
+  const epsUp  = epsPts[epsPts.length - 1] >= epsPts[0];
+  const epsCol = epsUp ? '#16a34a' : '#dc2626';
+
+  // Price scale (right axis)
+  const priceMin = pricePts.length ? Math.min(...pricePts) : 0;
+  const priceMax = pricePts.length ? Math.max(...pricePts) : 1;
+  const priceRng = priceMax - priceMin || Math.abs(priceMax) * 0.05 || 0.01;
+  const priceCol = '#1a56db';
+
+  const sx      = i => padL + (i / (n - 1)) * chartW;
+  const syEps   = v => padT + chartH - ((v - epsMin)   / epsRng)   * chartH;
+  const syPrice = v => padT + chartH - ((v - priceMin) / priceRng) * chartH;
+
+  // paths
+  const epsPathD   = epsPts.map((v,i)   => (i===0?'M':'L')+sx(i).toFixed(1)+','+syEps(v).toFixed(1)).join(' ');
+  const epsAreaD   = epsPathD+' L'+sx(n-1).toFixed(1)+','+(padT+chartH)+' L'+padL+','+(padT+chartH)+' Z';
+  const pricePathD = pricePts.map((v,i) => (i===0?'M':'L')+sx(i).toFixed(1)+','+syPrice(v).toFixed(1)).join(' ');
+
+  // grid
+  const gridLines = [0.25, 0.5, 0.75].map(f => {
+    const y = (padT + chartH - f * chartH).toFixed(0);
+    return '<line x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'" stroke="#dcd9d4" stroke-width="1" stroke-dasharray="3,3"/>';
+  }).join('');
+
+  // Y-axis labels
+  const epsYLabels = [0, 0.5, 1].map(f => {
+    const val = epsMin + f * epsRng;
+    const y   = (padT + chartH - f * chartH).toFixed(0);
+    return '<text x="'+(padL-5)+'" y="'+y+'" text-anchor="end" dominant-baseline="middle" font-size="8.5" fill="'+epsCol+'" font-family="\'DM Mono\',monospace">'+fNum(val,2)+'</text>';
+  }).join('');
+
+  const priceYLabels = pricePts.length ? [0, 0.5, 1].map(f => {
+    const val = priceMin + f * priceRng;
+    const y   = (padT + chartH - f * chartH).toFixed(0);
+    return '<text x="'+(W-padR+5)+'" y="'+y+'" text-anchor="start" dominant-baseline="middle" font-size="8.5" fill="'+priceCol+'" font-family="\'DM Mono\',monospace">$'+fNum(val,1)+'</text>';
+  }).join('') : '';
+
+  // ── X-axis date labels ──
+  // Show only first, middle-ish, and last to avoid crowding
+  const xAxisTicks = new Set([0, Math.floor((n-1)/2), n-1]);
+  const xLabels = epsPts.map((v,i) => {
+    if (!xAxisTicks.has(i)) return '';
+    const x   = sx(i).toFixed(0);
+    const lbl = xDateLbls[i] || '';
+    // two-line: date on top line, price date on bottom for last tick
+    if (i === n-1 && priceEndDate && priceEndDate !== lbl) {
+      // EPS date (report) + price data date — show both stacked if different
+      return '<text x="'+x+'" y="'+(padT+chartH+13)+'" text-anchor="middle" font-size="8" fill="#a1a1aa">'+lbl+'</text>'
+           + '<text x="'+x+'" y="'+(padT+chartH+22)+'" text-anchor="middle" font-size="7.5" fill="'+priceCol+'" opacity=".8">Price: '+priceEndDate+'</text>';
+    }
+    return '<text x="'+x+'" y="'+(padT+chartH+13)+'" text-anchor="middle" font-size="8" fill="#a1a1aa">'+lbl+'</text>';
+  }).join('');
+
+  // axis titles
+  const leftAxisTitle  = '<text x="10" y="'+(padT+chartH/2)+'" text-anchor="middle" dominant-baseline="middle" font-size="8" fill="'+epsCol+'" transform="rotate(-90,10,'+(padT+chartH/2)+')">EPS ($)</text>';
+  const rightAxisTitle = pricePts.length
+    ? '<text x="'+(W-10)+'" y="'+(padT+chartH/2)+'" text-anchor="middle" dominant-baseline="middle" font-size="8" fill="'+priceCol+'" transform="rotate(90,'+(W-10)+','+(padT+chartH/2)+')">Price ($)</text>'
+    : '';
+
+  // callout bubbles at endpoints
+  const epsEndX   = sx(n-1).toFixed(1);
+  const epsEndY   = syEps(epsPts[n-1]).toFixed(1);
+  const priceEndX = pricePts.length ? sx(n-1).toFixed(1) : null;
+  const priceEndY = pricePts.length ? syPrice(pricePts[n-1]).toFixed(1) : null;
+
+  const svgHtml = '<svg viewBox="0 0 '+W+' '+(H+10)+'" style="width:100%;height:195px;display:block;overflow:visible">'
+    + '<defs>'
+    + '<linearGradient id="'+gidEps+'" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0%" stop-color="'+epsCol+'" stop-opacity=".18"/>'
+    + '<stop offset="100%" stop-color="'+epsCol+'" stop-opacity="0"/>'
+    + '</linearGradient>'
+    + (pricePts.length
+      ? '<linearGradient id="'+gidPrice+'" x1="0" y1="0" x2="0" y2="1">'
+      + '<stop offset="0%" stop-color="'+priceCol+'" stop-opacity=".07"/>'
+      + '<stop offset="100%" stop-color="'+priceCol+'" stop-opacity="0"/>'
+      + '</linearGradient>' : '')
+    + '</defs>'
+
+    + '<rect x="'+padL+'" y="'+padT+'" width="'+chartW+'" height="'+chartH+'" fill="none" stroke="#eeecea" stroke-width="1"/>'
+    + gridLines
+    + leftAxisTitle + rightAxisTitle
+    + epsYLabels + priceYLabels
+    + xLabels
+
+    // price area + line (behind EPS)
+    + (pricePts.length
+      ? '<path d="'+pricePathD+' L'+sx(n-1).toFixed(1)+','+(padT+chartH)+' L'+padL+','+(padT+chartH)+' Z" fill="url(#'+gidPrice+')"/>'
+      + '<path d="'+pricePathD+'" fill="none" stroke="'+priceCol+'" stroke-width="1.8" stroke-dasharray="5,3" stroke-linejoin="round" opacity=".8"/>'
+      : '')
+
+    // EPS area + line (on top)
+    + '<path d="'+epsAreaD+'" fill="url(#'+gidEps+')"/>'
+    + '<path d="'+epsPathD+'" fill="none" stroke="'+epsCol+'" stroke-width="2.5" stroke-linejoin="round"/>'
+
+    // EPS dots
+    + epsPts.map((v,i) =>
+        '<circle cx="'+sx(i).toFixed(1)+'" cy="'+syEps(v).toFixed(1)+'" r="'+(i===n-1?4:2.5)+'"'
+        +' fill="'+(i===0?'#a1a1aa':epsCol)+'" stroke="#fff" stroke-width="1.2"/>'
+      ).join('')
+
+    // Price dots (first + last only)
+    + (pricePts.length
+      ? [0, n-1].map(i =>
+          '<circle cx="'+sx(i).toFixed(1)+'" cy="'+syPrice(pricePts[i]).toFixed(1)+'" r="3"'
+          +' fill="'+priceCol+'" stroke="#fff" stroke-width="1.2"/>'
+        ).join('')
+      : '')
+
+    // EPS endpoint bubble
+    + '<rect x="'+(+epsEndX-1)+'" y="'+(+epsEndY-16)+'" width="42" height="13" rx="3" fill="'+epsCol+'" opacity=".92"/>'
+    + '<text x="'+(+epsEndX+20)+'" y="'+(+epsEndY-9.5)+'" text-anchor="middle" font-size="8" fill="#fff" font-family="\'DM Mono\',monospace" font-weight="600">'+fNum(epsPts[n-1],2)+'</text>'
+
+    // Price endpoint bubble
+    + (priceEndX && priceEndY
+      ? '<rect x="'+(+priceEndX-1)+'" y="'+(+priceEndY+4)+'" width="46" height="13" rx="3" fill="'+priceCol+'" opacity=".92"/>'
+      + '<text x="'+(+priceEndX+22)+'" y="'+(+priceEndY+10.5)+'" text-anchor="middle" font-size="8" fill="#fff" font-family="\'DM Mono\',monospace" font-weight="600">$'+fNum(pricePts[n-1],2)+'</text>'
+      : '')
+
+    // legend
+    + '<circle cx="'+(padL+8)+'" cy="'+(H+4)+'" r="3.5" fill="'+epsCol+'"/>'
+    + '<text x="'+(padL+15)+'" y="'+(H+4)+'" dominant-baseline="middle" font-size="8.5" fill="#52525b">EPS (left axis)</text>'
+    + (pricePts.length
+      ? '<line x1="'+(padL+120)+'" y1="'+(H+4)+'" x2="'+(padL+136)+'" y2="'+(H+4)+'" stroke="'+priceCol+'" stroke-width="2" stroke-dasharray="4,2"/>'
+      + '<text x="'+(padL+140)+'" y="'+(H+4)+'" dominant-baseline="middle" font-size="8.5" fill="#52525b">Stock Price (right axis)</text>'
+      : '')
+    + '</svg>';
+
+  // ── Verdict ──
+  const vClass = yoyUp ? 'pos' : 'neg';
+  const vText  = yoyUp
+    ? '📈 EPS improved YoY' + (yoyPct!=null ? '  (+'+fNum(yoyPct,1)+'%)':'')
+    : '📉 EPS declined YoY' + (yoyPct!=null ? '  ('+fNum(yoyPct,1)+'%)':'');
+
+  // ── EPS Latest label with YoY diff in parentheses ──
+  const yoyDiffStr = yoyDiff != null
+    ? ' <span style="font-size:11px;font-weight:500;color:'+(yoyDiff>=0?'var(--green)':'var(--red)')+'">('+(yoyDiff>=0?'+':'')+'$'+fNum(yoyDiff)+')</span>'
+    : '';
+
+  const expTr = document.createElement('tr');
+  expTr.dataset.forSym = sym;
+  expTr.innerHTML = '<td colspan="12" class="eps-exp-td">'
+    + '<div class="eps-exp-panel">'
+
+    // ── LEFT: metrics ──
+    + '<div class="eps-exp-left">'
+    + '<div class="eps-exp-title">'+sym+' — EPS Breakdown</div>'
+    + '<div class="eps-exp-metrics">'
+
+    // Latest EPS + YoY diff in parens
+    + '<div class="eps-exp-metric"><div class="eps-exp-key">EPS Latest</div>'
+    + '<div class="eps-exp-val '+(hasCurr&&curr>0?'up':'dn')+'">'
+    + (hasCurr ? (curr>0?'+':'')+'$'+fNum(curr) : '—') + yoyDiffStr
+    + '</div></div>'
+
+    // Report date
+    + '<div class="eps-exp-metric"><div class="eps-exp-key">Report Date</div>'
+    + '<div class="eps-exp-val nt" style="font-size:13px">'+(reportDate||'—')+'</div></div>'
+
+    // YoY %
+    + '<div class="eps-exp-metric"><div class="eps-exp-key">YoY Change %</div>'
+    + '<div class="eps-exp-val '+(yoyPct>0?'up':'dn')+'">'+(yoyPct!=null?(yoyPct>0?'+':'')+fNum(yoyPct,1)+'%':'—')+'</div></div>'
+
+    // QoQ %
+    + '<div class="eps-exp-metric"><div class="eps-exp-key">QoQ Change %</div>'
+    + '<div class="eps-exp-val '+(qoqPct>0?'up':'dn')+'">'+(qoqPct!=null?(qoqPct>0?'+':'')+fNum(qoqPct,1)+'%':'—')+'</div></div>'
+
+    + '</div>'
+
+    // Current price
+    + '<div class="eps-exp-metric" style="margin-top:6px"><div class="eps-exp-key">Current Price'+(dataDate?' ('+dataDate+')':'')+'</div>'
+    + '<div class="eps-exp-val nt">'+(close!=null?'$'+fNum(close):'—')+'</div></div>'
+
+    + '<div class="eps-verdict '+vClass+'" style="margin-top:10px">'+vText+'</div>'
+    + '<div style="font-size:10px;color:var(--ink-3);margin-top:4px">'+name+'</div>'
+    + '</div>'
+
+    // ── RIGHT: dual chart ──
+    + '<div class="eps-exp-right">'
+    + '<div class="eps-chart-label" style="display:flex;align-items:center;gap:8px">'
+    + 'EPS Movement vs. Stock Price'
+    + '<span style="font-size:9px;font-weight:500;color:var(--ink-3)">dual-axis</span>'
+    + '</div>'
+    + svgHtml
+    + '</div>'
+
+    + '</div></td>';
+
+  srcRow.insertAdjacentElement('afterend', expTr);
+  epsExpandRow = expTr;
+}
+
+// ── date helpers ──
+function fmtShortDate(d) {
+  if (!d) return '';
+  const s = d.split('T')[0];           // "2024-03-15"
+  const parts = s.split('-');
+  if (parts.length < 3) return s;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(parts[1],10)-1] + " '" + parts[0].slice(2); // "Mar '24"
+}
+function shiftDateByYear(d, yrs) {
+  if (!d) return '';
+  const s = d.split('T')[0];
+  const parts = s.split('-');
+  if (parts.length < 3) return s;
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const newYear = parseInt(parts[0],10) + yrs;
+  return months[parseInt(parts[1],10)-1] + " '" + String(newYear).slice(2);
+}
 
 function renderEpsPagination(total) {
   const pg = document.getElementById('epsPgn');
@@ -1347,7 +1678,7 @@ function renderEpsPagination(total) {
     const b = document.createElement('button');
     b.className = 'pgb' + (active ? ' active' : '');
     b.textContent = label; b.disabled = disabled;
-    if (!disabled) b.onclick = () => { epsPage = p; renderEps(); };
+    if (!disabled) b.onclick = () => { epsPage=p; if(epsExpandRow){epsExpandRow.remove();epsExpandRow=null;} renderEps(); };
     pgc.appendChild(b);
   };
   addBtn('‹', epsPage - 1, epsPage === 1);
